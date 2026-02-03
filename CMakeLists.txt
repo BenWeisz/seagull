@@ -5,9 +5,9 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Configure! your exe name
-set(EXE_NAME quick-start)
+set(EXE_NAME seagull)
 # Configure! this as the absolute path to your vendors folder, DO NOT USE RELATIVE PATHS!
-set(VENDORS "/Users/bweisz/vendors")
+set(VENDORS "/home/bweisz/dev/vendors")
 # Configure! this if you want to build for the old intel based apple systems
 # set(INTEL_APPLE 1)
 
@@ -64,11 +64,10 @@ target_link_libraries(cimgui PUBLIC glfw)
 file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/cimgui)
 set_target_properties(cimgui PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/cimgui)
 
-###################################
-
 # Configure!
 # Common sources go here
 set(SOURCE_FILES main.c
+	src/database.c
 	# src/another_file.c
 	# src/and_another.c
 	)
@@ -94,14 +93,22 @@ target_include_directories(${EXE_NAME} PUBLIC
 	${VENDORS}/glad/include # GLAD - OpenGL 4.6 Core
 	${VENDORS}/cimgui
 	${VENDORS}/cimgui/imgui
-	${VENDORS}/cimgui/generator/output)
+	${VENDORS}/cimgui/generator/output
+	${VENDORS}/sqlite)
+
+# Add sqlite3
+target_link_directories(${EXE_NAME} PUBLIC
+	${VENDORS}/sqlite)
 
 # Link glfw, cimgui to application
 # Note: We do this a bit differently for APPLE beacuse its linker is smarter and will rescan the static libs for objects
 if (APPLE)
-	target_link_libraries(${EXE_NAME} PUBLIC cimgui)
+	target_link_libraries(${EXE_NAME} PUBLIC cimgui sqlite3)
+elseif(WIN32)
+	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui sqlite3)
 else()
-	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui)
+	find_package(X11 REQUIRED)
+	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui sqlite3 X11::X11)
 endif()
 
 # Load the GLAD source
