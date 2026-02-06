@@ -67,6 +67,7 @@ set_target_properties(cimgui PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_
 # Configure!
 # Common sources go here
 set(SOURCE_FILES main.c
+	src/io.c
 	src/database.c
 	# src/another_file.c
 	# src/and_another.c
