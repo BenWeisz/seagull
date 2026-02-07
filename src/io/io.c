@@ -1,7 +1,9 @@
-#include "io.h"
+#include "../../include/io/io.h"
 
 #include <stdlib.h>
 #include <stdio.h>
+
+#include "io/log.h"
 
 // There are a couple of shoty things with the function
 // but, it should be good for files smaller than ~4Gb
@@ -10,29 +12,29 @@ u8* IO_read_u8_padded(const char* path, u32* size, const u32 padding) {
 
     FILE* file = fopen(path, "rb");
     if (file == NULL) {
-        fprintf(stderr, "ERROR: Could not open file %s\n", path);
+        LOG_error("Could not open file %s\n", path);
         fclose(file);
         return NULL;
     }
 
     // Figure out the size of the file
-    i32 r = fseek(file, 0, SEEK_END);
+    s32 r = fseek(file, 0, SEEK_END);
     if (r != 0) {
-        fprintf(stderr, "ERROR: Could not seek file %s\n", path);
+        LOG_error("Could not seek file %s\n", path);
         fclose(file);
         return NULL;
     }
 
-    const i64 len = ftell(file);
+    const s64 len = ftell(file);
     if (len == -1) {
-        fprintf(stderr, "ERROR: Could not read file %s\n", path);
+        LOG_error("Could not read file %s\n", path);
         fclose(file);
         return NULL;
     }
 
     r = fseek(file, 0, SEEK_SET);
     if (r != 0) {
-        fprintf(stderr, "ERROR: Could not seek file %s\n", path);
+        LOG_error("Could not seek file %s\n", path);
         fclose(file);
         return NULL;
     }
@@ -40,15 +42,15 @@ u8* IO_read_u8_padded(const char* path, u32* size, const u32 padding) {
     // Allocate memory for the file data
     u8* data = (u8*)malloc(sizeof(u8) * (len + padding));
     if (data == NULL) {
-        fprintf(stderr, "ERROR: Could not allocate memory for file %s\n", path);
+        LOG_error("Could not allocate memory for file %s\n", path);
         fclose(file);
         return NULL;
     }
 
     // Read the file data
     const u64 read_len = fread(data, sizeof(u8), len, file);
-    if ((i64)read_len != len) {
-        fprintf(stderr, "ERROR: Could not read file %s\n", path);
+    if ((s64)read_len != len) {
+        LOG_error("Could not read file %s\n", path);
         fclose(file);
         return NULL;
     }

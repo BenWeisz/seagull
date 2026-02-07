@@ -1,4 +1,5 @@
 /cmake-build-debug
 /build
 /debug
+/data
 .DS_Store

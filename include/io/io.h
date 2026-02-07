@@ -1,7 +1,7 @@
 #ifndef SEAGULL_IO_H
 #define SEAGULL_IO_H
 
-#include "types.h"
+#include "../types.h"
 
 #ifdef SEAGULL_RELEASE
 #define IO_RESOURCE(x) x

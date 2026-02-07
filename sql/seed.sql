@@ -13,5 +13,6 @@ CREATE TABLE IF NOT EXISTS messages (
     is_incoming INTEGER NOT NULL,
     time TEXT NOT NULL,
     body TEXT NOT NULL,
+    hash INTEGER NOT NULL,
     FOREIGN KEY (contact) REFERENCES contacts(id)
 );
