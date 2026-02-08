@@ -6,6 +6,18 @@
 #include "io/io.h"
 #include "io/log.h"
 
+MESSAGE_CONTACT MESSAGE_CONTACT_make_blank() {
+    const MESSAGE_CONTACT contact = { NULL, NULL, NULL };
+    return contact;
+}
+
+MESSAGE MESSAGE_make_blank() {
+    const MESSAGE_CONTACT contact = MESSAGE_CONTACT_make_blank();
+    const MESSAGE_DATE date = { 0, 0, 0, 0, 0 };
+    const MESSAGE message = { contact, UNKNOWN, date, NULL, 0 };
+    return message;
+}
+
 LIST_DEFINE(MESSAGE)
 
 PARSE_RESULT PARSE_load(const char* path) {
@@ -38,12 +50,201 @@ PARSE_RESULT PARSE_load(const char* path) {
     // Patch up the 16 surrogates
     PARSE_patch_u16_surrogates(back_buffer, &back_buffer_len);
 
-    // Skip possible all mailboxes header and determine first mailbox type
-    // MESSAGE_DIRECTION state = UNKNOWN;
+    /*
+     * Combined Headers
+     *
+     * Inbox SMS:
+     * EF BB BF     0D 0A       49 6E 62 6F 78 20 53 4D 53  0D 0A
+     * (UTF-8 BOM)  (New Line)  Inbox SMS                   (New Line)
+     *
+     * Sentbox SMS:
+     * EF BB BF     0D 0A       53 65 6E 74 62 6F 78 20 53 4D 53    0D 0A
+     * (UTF-8 BOM)  (New Line)  Sentbox SMS                         (New Line)
+     */
+    u8* curr_buffer = back_buffer;
 
-    // char* data = (char*)back_buffer + 3;
+    const u8 utf8_bom[] = { 0xEF, 0xBB, 0xBF, 0x0D, 0x0A };
+    const char* inbox_header = "Inbox SMS\r\n";
+    const char* sentbox_header = "Sentbox SMS\r\n";
 
+    // The main parsing loop
+    MESSAGE_DIRECTION direction = UNKNOWN;
+    PARSE_STATE state = FIND_DIRECTION;
 
+    MESSAGE message = MESSAGE_make_blank();
+    MESSAGE_CONTACT message_contact_cache = MESSAGE_CONTACT_make_blank();
+    u8 is_first_message = 1;
+    u8 signal_exit = 0;
+    while (*curr_buffer != '\0') {
+        switch (state) {
+            case FIND_DIRECTION: {
+                // Find the Inbox or Sentbox header
+                u32 i = 0;
+                u8 found_utf8_bom = 1;
+                while (i < 5 && curr_buffer[i] != '\0') {
+                    if (curr_buffer[i] != utf8_bom[i]) {
+                        found_utf8_bom = 0;
+                        break;
+                    }
+                    i++;
+                }
+
+                // If you haven't found the UTF8 bom, continue
+                if (found_utf8_bom == 0 || curr_buffer[i] == '\0') {
+                    curr_buffer++;
+                    break;
+                }
+
+                const u32 ti = i;
+
+                // Find the Inbox Header
+                u8 found_inbox_header = 1;
+                while (i < 16 && curr_buffer[i] != '\0') {
+                    if (curr_buffer[i] != inbox_header[i - 5]) {
+                        found_inbox_header = 0;
+                        break;
+                    }
+                    i++;
+                }
+
+                if (curr_buffer[i] == '\0') {
+                    curr_buffer++;
+                    break;
+                }
+
+                // If we find the inbox header, move the curr_buffer forward
+                // and change the parsing state
+                if (found_inbox_header == 1) {
+                    state = FIND_CONTACT;
+                    direction = INCOMING;
+                    curr_buffer += 16;
+                    break;
+                }
+
+                // If we didnt find the inbox header, look for the sentbox header
+                u8 found_sentbox_header = 1;
+                i = ti;
+                while (i < 18 && curr_buffer[i] != '\0') {
+                    if (curr_buffer[i] != sentbox_header[i - 5]) {
+                        found_sentbox_header = 0;
+                        break;
+                    }
+                    i++;
+                }
+
+                if (curr_buffer[i] == '\0') {
+                    curr_buffer++;
+                    break;
+                }
+
+                // If we find the sentbox header, move the curr_buffer forward
+                // and change the parsing state
+                if (found_sentbox_header == 1) {
+                    state = FIND_CONTACT;
+                    direction = OUTGOING;
+                    curr_buffer += 18;
+                    break;
+                }
+
+                // Oh man, we couldn't find anything :(
+                curr_buffer++;
+
+                break;
+            }
+            case FIND_CONTACT: {
+                // The assumption is that we've processed the previous message
+                // before switching to the FIND_CONTACT state
+
+                if (is_first_message == 1) {
+                    MESSAGE_CONTACT contact;
+                    s64 next_line_pos;
+                    const u8 r = PARSE_get_line_contact_info((char*)curr_buffer, &contact, &next_line_pos);
+                    if (r == 0) {
+                        if (next_line_pos == -1) {
+                            signal_exit = 1;
+                            break;
+                        }
+
+                        curr_buffer += next_line_pos;
+                        break;
+                    }
+
+                    is_first_message = 0;
+                    message_contact_cache = contact;
+
+                    // next_line_pos must be > -1 because otherwise this wouldn't be a contact line
+                    curr_buffer += next_line_pos;
+                }
+
+                // We've found a contact line so create a new message
+                message = MESSAGE_make_blank();
+                message.direction = direction;
+                message.contact = message_contact_cache;
+                state = FIND_TIME;
+                break;
+            }
+            case FIND_TIME: {
+                // We are pretty much guaranteed to find the date line
+                // because it is a requirement that it succeeds the contact line
+
+                MESSAGE_DATE date;
+                s64 next_line_pos;
+                const u8 r = PARSE_get_line_date_info((char*)curr_buffer, &date, &next_line_pos);
+                // If there's no next line or this line isn't a date this is a bad message
+                if (r == 0 || next_line_pos == -1) {
+                    // Something went wrong
+                    signal_exit = 1;
+                    break;
+                }
+
+                // We've got a proper message below
+                message.date = date;
+                state = FIND_BODY;
+
+                curr_buffer += next_line_pos;
+                break;
+            }
+            case FIND_BODY: {
+                // Save the curr_buffer so we know where the start of the body is
+                const u8* body_start = curr_buffer;
+
+                // We want to find the next contact line
+                s64 next_line_pos;
+                u8 r = 0;
+                u8* end_of_body = curr_buffer;
+                while (r == 0) {
+                    r = PARSE_get_line_contact_info((char*)curr_buffer, &message_contact_cache, &next_line_pos);
+                    if (next_line_pos == -1) break;
+
+                    if (r != 0) end_of_body = curr_buffer;
+                    curr_buffer += next_line_pos;
+                }
+
+                // We've come to the end of the message body
+                // Rewind all of the trailing \r\n and then drop a null terminator
+                while (*(end_of_body - 2) == '\r' && *(end_of_body - 1) == '\n' && end_of_body != body_start) {
+                    end_of_body -= 2;
+                }
+
+                // Cap off the body
+                end_of_body[0] = 0x00;
+
+                // Set the body
+                message.body = (char*)body_start;
+                r = LIST_MESSAGE_push(messages, message);
+                if (r == 0) {
+                    signal_exit = 1;
+                    break;
+                }
+
+                state = FIND_CONTACT;
+
+                break;
+            }
+        }
+
+        if (signal_exit == 1) break;
+    }
 
     // Set up the result
     result.messages = messages;

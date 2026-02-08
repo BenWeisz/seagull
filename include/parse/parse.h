@@ -24,6 +24,8 @@ typedef struct {
     char* phone_number;
 } MESSAGE_CONTACT;
 
+MESSAGE_CONTACT MESSAGE_CONTACT_make_blank();
+
 typedef struct {
     MESSAGE_CONTACT contact;
     MESSAGE_DIRECTION direction;
@@ -32,6 +34,8 @@ typedef struct {
     u32 hash;
 } MESSAGE;
 
+MESSAGE MESSAGE_make_blank();
+
 LIST_DECLARE(MESSAGE)
 
 typedef struct {
@@ -39,15 +43,12 @@ typedef struct {
     const u8* back_buffer;
 } PARSE_RESULT;
 
-// typedef enum {
-//     START,
-//     INBOX_CONTACT,
-//     INBOX_TIME,
-//     INBOX_BODY,
-//     SENTBOX_CONTACT,
-//     SENTBOX_TIME,
-//     SENTBOX_BODY
-// } PARSE_STATE;
+typedef enum {
+    FIND_DIRECTION,
+    FIND_CONTACT,
+    FIND_TIME,
+    FIND_BODY
+} PARSE_STATE;
 
 PARSE_RESULT PARSE_load(const char* path);
 void PARSE_free(const PARSE_RESULT result);
