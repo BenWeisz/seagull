@@ -1,0 +1,3 @@
+[submodule "libs/nesquik"]
+	path = libs/nesquik
+	url = https://github.com/BenWeisz/nesquik.git
