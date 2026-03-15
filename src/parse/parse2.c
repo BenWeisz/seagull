@@ -6,35 +6,7 @@
 #include "utils.h"
 #include "io/log.h"
 #include "io/io.h"
-#include "state_machine/state_machine.h"
-
-// These are used internally and therefore not part of the PARSE interface
-LIST_DECLARE(u32)
-LIST_u32* PARSE_find_line_starts(const u8* buf, const u32 buf_len);
-
-typedef struct {
-    LIST_MESSAGE* messages;
-    MESSAGE_BOX curr_box;
-
-    LIST_u32* line_starts;
-    u32 line_i;
-} PARSE_CONTEXT;
-
-u8 PARSE_line_is_empty(const u8* buf, const u32 buf_len);
-u8 PARSE_goto_next_non_empty_line(const u8* buf, const u32 buf_len,
-    PARSE_CONTEXT* context);
-
-STATE_CREATE(STATE_FIND_BOX,   STATE_TYPE_START)
-STATE_CREATE(STATE_CONTACT, STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_TIME,    STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_BODY,    STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_END,     STATE_TYPE_END)
-STATE_CREATE(STATE_ERROR,   STATE_TYPE_END)
-
-STATE* STATE_FIND_BOX_action(u8* buf, const u32 buf_len, void* context);
-STATE* STATE_CONTACT_action(u8* buf, u32 buf_len, void* context);
-STATE* STATE_TIME_action(u8* buf, u32 buf_len, void* context);
-STATE* STATE_BODY_action(u8* buf, u32 buf_len, void* context);
+#include "parse/parse.ph"
 
 PARSE_RESULT PARSE_parse(const char* path) {
     PARSE_RESULT result = { NULL, NULL };
@@ -46,6 +18,9 @@ PARSE_RESULT PARSE_parse(const char* path) {
         LOG_error("Failed to read file %s\n", path);
         return result;
     }
+
+    // Patch up the UTF-16 surrogates
+    PARSE_patch_u16_surrogates(back_buffer, &back_buffer_len);
 
     // Set up the data parsing state machine
     STATE_MACHINE* state_machine = STATE_MACHINE_create(back_buffer, back_buffer_len);
@@ -115,6 +90,39 @@ void PARSE_free(PARSE_RESULT* result) {
 
     free((void*)result->back_buffer);
     result->back_buffer = NULL;
+}
+
+void PARSE_patch_u16_surrogates(u8* buffer, u32* len) {
+    // len - 5 is the bound because we are only looking for surrogate pairs
+    u32 curr_len = *len;
+    u32 i = 0;
+    while (i < curr_len - 5) {
+        // Found a surrogate pair!
+        if (buffer[i] == 0xED && (buffer[i + 1] & 0xF0) == 0xA0) {
+            // Compute the surrogate pair
+            const u16 high = ((buffer[i + 1] & 0x0F) << 6) | (buffer[i + 2] & 0x3F);
+            const u16 low = ((buffer[i + 4] & 0x0F) << 6) | (buffer[i + 5] & 0x3F);
+
+            const u32 codepoint = 0x10000 + (high << 10) + low;
+
+            // Update the buffer with the correct UTF-8 encoding
+            buffer[i] = 0xF0 | (codepoint >> 18);
+            buffer[i + 1] = 0x80 | ((codepoint >> 12) & 0x3F);
+            buffer[i + 2] = 0x80 | ((codepoint >> 6) & 0x3F);
+            buffer[i + 3] = 0x80 | (codepoint & 0x3F);
+
+            // Move up the remaining data (sub 6) but add 1 because we need the null terminator
+            memmove(buffer + i + 4, buffer + i + 6, curr_len - i - 6 + 1);
+            curr_len -= 2;
+            i += 4;
+
+            continue;
+        }
+
+        i++;
+    }
+
+    *len = curr_len;
 }
 
 // Private

@@ -3,7 +3,6 @@
 
 #include "types.h"
 #include "data/message.h"
-#include "list/list.h"
 
 typedef struct {
     LIST_MESSAGE* messages;
