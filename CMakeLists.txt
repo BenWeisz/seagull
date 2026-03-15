@@ -69,7 +69,9 @@ set_target_properties(cimgui PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_
 set(SOURCE_FILES main.c
 		src/io/io.c
 		src/io/log.c
+		src/data/message.c
 		src/parse/parse.c
+		src/parse/parse2.c
 		src/database/database.c
 	# src/another_file.c
 	# src/and_another.c
@@ -90,9 +92,15 @@ add_executable(${EXE_NAME} ${SOURCE_FILES})
 # Add GLFW subdirectory
 add_subdirectory(${VENDORS}/glfw-3.4 glfw-3.4)
 
+# Add Nesquik
+add_subdirectory(${VENDORS}/nesquik nesquik)
+target_link_libraries(${EXE_NAME} PRIVATE nesquik)
+
 # Add the include directory for headers
 target_include_directories(${EXE_NAME} PUBLIC
 	include
+	libs/
+	${VENDORS}/nesquik/include
 	${VENDORS}/glad/include # GLAD - OpenGL 4.6 Core
 	${VENDORS}/cimgui
 	${VENDORS}/cimgui/imgui
