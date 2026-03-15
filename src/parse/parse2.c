@@ -69,7 +69,8 @@ PARSE_RESULT PARSE_parse(const char* path) {
     context.line_i = 0;
 
     // Run the state machine
-    STATE* state_r = STATE_MACHINE_run(state_machine, &context);
+    const STATE* state_r = STATE_MACHINE_run(state_machine, &context);
+    if (state_r == NULL || strcmp(state_r->name, "STATE_ERROR") == 0) return result;
 
     // Set up the result
     result.messages = messages;
