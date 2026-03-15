@@ -4,15 +4,17 @@
 #include "database/database.h"
 #include "io/io.h"
 #include "parse/parse.h"
+#include "state_machine/state_machine.h"
+#include "parse/parse2.h"
+#include "io/log.h"
 
 int main() {
-    sqlite3* db = DATABASE_setup();
-    DATABASE_cleanup(db);
+    //sqlite3* db = DATABASE_setup();
+    //DATABASE_cleanup(db);
 
-    const PARSE_RESULT result = PARSE_load(IO_RESOURCE("data/20241217_094850.txt"));
-    PARSE_free(result);
+    PARSE_RESULT result = PARSE_parse(IO_RESOURCE("data/20260131_142549.txt"));
+    PARSE_free(&result);
 
     // TODO!!! MANAGE BOX TYPE SWITCHING IN THE PARSER
-
     return 0;
 }

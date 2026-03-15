@@ -69,6 +69,7 @@ set_target_properties(cimgui PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_
 set(SOURCE_FILES main.c
 		src/io/io.c
 		src/io/log.c
+		src/data/lists.c
 		src/data/message.c
 		src/parse/parse.c
 		src/parse/parse2.c
