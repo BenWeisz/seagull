@@ -1,6 +1,7 @@
 #include "parse/parse2.h"
 
 #include <string.h>
+#include <stdio.h>
 
 #include "types.h"
 #include "utils.h"
@@ -93,6 +94,10 @@ void PARSE_free(PARSE_RESULT* result) {
     result->back_buffer = NULL;
 }
 
+/////////////////////////////////////////////////////////////////////////
+// parse.ph
+/////////////////////////////////////////////////////////////////////////
+
 void PARSE_patch_u16_surrogates(u8* buffer, u32* len) {
     // len - 5 is the bound because we are only looking for surrogate pairs
     u32 curr_len = *len;
@@ -126,7 +131,71 @@ void PARSE_patch_u16_surrogates(u8* buffer, u32* len) {
     *len = curr_len;
 }
 
-// Private
+LIST_u32* PARSE_find_line_starts(const u8* buf, const u32 buf_len) {
+    // Create a list containing the index of the start of each line in buf
+
+    // Create the line list
+    LIST_u32* lines = LIST_u32_create(256);
+    if (lines == NULL) {
+        LOG_error("Failed to allocate memory for LIST_u32");
+        return NULL;
+    }
+
+    if (buf_len == 0) return lines;
+    LIST_u32_push(lines, 0);
+
+    u32 pos = 0;
+    while (pos < buf_len) {
+        if (buf[pos] == 0x0A && pos + 1 < buf_len) {
+            LIST_u32_push(lines, pos + 1);
+        }
+        pos++;
+    }
+
+    return lines;
+}
+
+u8 PARSE_line_is_empty(const u8* buf, const u32 buf_len) {
+    // Figure out if the line is empty
+    if (buf_len < 2) return 1;
+    if (buf[0] == 0x0D && buf[1] == 0x0A) return 1;
+    return 0;
+}
+
+u8 PARSE_goto_next_non_empty_line(const u8* buf, const u32 buf_len,
+    PARSE_CONTEXT* context) {
+
+    const LIST_u32* line_starts = context->line_starts;
+    if (line_starts == NULL) return 0;
+
+    // Find the next non-empty line
+    while (context->line_i < line_starts->size) {
+        u32 line_loc;
+        LIST_u32_get(line_starts, context->line_i, &line_loc);
+
+        if (!PARSE_line_is_empty(buf + line_loc, buf_len - line_loc)) break;
+        context->line_i++;
+    }
+
+    if (context->line_i == line_starts->size) return 0;
+
+    return 1;
+}
+
+u8 PARSE_get_line_date_info(const char* buffer, MESSAGE_DATE* date) {
+    date->year = -1;
+    date->month = -1;
+    date->day = -1;
+    date->hour = -1;
+    date->minute = -1;
+
+    const s32 r = sscanf(buffer, "%d/%d/%d %d:%d",
+        &(date->year), &(date->month), &(date->day),
+        &(date->hour), &(date->minute));
+    if (r != 5) return 0;
+    return 1;
+}
+
 STATE* STATE_FIND_BOX_action(u8* buf, const u32 buf_len, void* context) {
     PARSE_CONTEXT* p_context = (PARSE_CONTEXT*)context;
 
@@ -187,55 +256,4 @@ STATE* STATE_TIME_action(u8* buf, u32 buf_len, void* context) {
 
 STATE* STATE_BODY_action(u8* buf, u32 buf_len, void* context) {
     return NULL;
-}
-
-LIST_u32* PARSE_find_line_starts(const u8* buf, const u32 buf_len) {
-    // Create a list containing the index of the start of each line in buf
-
-    // Create the line list
-    LIST_u32* lines = LIST_u32_create(256);
-    if (lines == NULL) {
-        LOG_error("Failed to allocate memory for LIST_u32");
-        return NULL;
-    }
-
-    if (buf_len == 0) return lines;
-    LIST_u32_push(lines, 0);
-
-    u32 pos = 0;
-    while (pos < buf_len) {
-        if (buf[pos] == 0x0A && pos + 1 < buf_len) {
-            LIST_u32_push(lines, pos + 1);
-        }
-        pos++;
-    }
-
-    return lines;
-}
-
-u8 PARSE_line_is_empty(const u8* buf, const u32 buf_len) {
-    // Figure out if the line is empty
-    if (buf_len < 2) return 1;
-    if (buf[0] == 0x0D && buf[1] == 0x0A) return 1;
-    return 0;
-}
-
-u8 PARSE_goto_next_non_empty_line(const u8* buf, const u32 buf_len,
-    PARSE_CONTEXT* context) {
-
-    const LIST_u32* line_starts = context->line_starts;
-    if (line_starts == NULL) return 0;
-
-    // Find the next non-empty line
-    while (context->line_i < line_starts->size) {
-        u32 line_loc;
-        LIST_u32_get(line_starts, context->line_i, &line_loc);
-
-        if (!PARSE_line_is_empty(buf + line_loc, buf_len - line_loc)) break;
-        context->line_i++;
-    }
-
-    if (context->line_i == line_starts->size) return 0;
-
-    return 1;
 }
