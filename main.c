@@ -5,7 +5,7 @@
 #include "io/io.h"
 #include "parse/parse.h"
 #include "state_machine/state_machine.h"
-#include "parse/parse2.h"
+#include "parse/parse.h"
 #include "io/log.h"
 
 int main() {

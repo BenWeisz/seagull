@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.20)
 # Configure! your exe name
 set(EXE_NAME seagull)
 # Configure! this as the absolute path to your vendors folder, DO NOT USE RELATIVE PATHS!
-set(VENDORS "/home/bweisz/dev/vendors")
+set(VENDORS "/Users/bweisz/vendors")
 # Configure! this if you want to build for the old intel based apple systems
 # set(INTEL_APPLE 1)
 
@@ -72,11 +72,7 @@ set(SOURCE_FILES main.c
 		src/data/lists.c
 		src/data/message.c
 		src/parse/parse.c
-		src/parse/parse2.c
-		src/database/database.c
-	# src/another_file.c
-	# src/and_another.c
-	)
+		src/database/database.c)
 
 # Configure! Set up the platform dependent sources
 if(WIN32)
@@ -102,11 +98,11 @@ target_include_directories(${EXE_NAME} PUBLIC
 	include
 	libs/
 	${VENDORS}/nesquik/include
+	${VENDORS}/sqlite
 	${VENDORS}/glad/include # GLAD - OpenGL 4.6 Core
 	${VENDORS}/cimgui
 	${VENDORS}/cimgui/imgui
-	${VENDORS}/cimgui/generator/output
-	${VENDORS}/sqlite)
+	${VENDORS}/cimgui/generator/output)
 
 # Add sqlite3
 target_link_directories(${EXE_NAME} PUBLIC
@@ -114,23 +110,15 @@ target_link_directories(${EXE_NAME} PUBLIC
 
 # Link glfw, cimgui to application
 # Note: We do this a bit differently for APPLE beacuse its linker is smarter and will rescan the static libs for objects
+target_link_libraries(${EXE_NAME} PUBLIC sqlite3)
 if (APPLE)
-	target_link_libraries(${EXE_NAME} PUBLIC cimgui sqlite3)
+	target_link_libraries(${EXE_NAME} PUBLIC cimgui)
 elseif(WIN32)
-	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui sqlite3)
+	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui)
 else()
 	find_package(X11 REQUIRED)
-	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui sqlite3 X11::X11)
+	target_link_libraries(${EXE_NAME} PUBLIC glfw cimgui X11::X11)
 endif()
-
-# Load the GLAD source
-target_sources(${EXE_NAME} PUBLIC ${VENDORS}/glad/src/glad.c) 
-
-# Add CIMGUI compile definitions
-target_compile_definitions(${EXE_NAME} PUBLIC 
-	"-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS=1"
-	-DCIMGUI_USE_OPENGL3
-	-DCIMGUI_USE_GLFW)
 
 # Add debug mode macro
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
