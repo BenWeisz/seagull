@@ -24,13 +24,7 @@ typedef struct {
 u8 PARSE_goto_next_non_empty_line(const u8* buf, const u32 buf_len,
     PARSE_CONTEXT* context);
 u8 PARSE_get_line_date_info(const char* buffer, MESSAGE_DATE* date);
-
-STATE_CREATE(STATE_FIND_BOX,    STATE_TYPE_START)
-STATE_CREATE(STATE_CONTACT,     STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_TIME,        STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_BODY,        STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_END,         STATE_TYPE_END)
-STATE_CREATE(STATE_ERROR,       STATE_TYPE_END)
+u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact);
 
 STATE* STATE_FIND_BOX_action(u8* buf, const u32 buf_len, void* context);
 STATE* STATE_CONTACT_action(u8* buf, u32 buf_len, void* context);

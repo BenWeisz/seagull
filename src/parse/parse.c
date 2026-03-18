@@ -9,6 +9,13 @@
 #include "io/io.h"
 #include "parse/parse.ph"
 
+STATE_CREATE(STATE_FIND_BOX,    STATE_TYPE_START)
+STATE_CREATE(STATE_CONTACT,     STATE_TYPE_INTERNAL)
+STATE_CREATE(STATE_TIME,        STATE_TYPE_INTERNAL)
+STATE_CREATE(STATE_BODY,        STATE_TYPE_INTERNAL)
+STATE_CREATE(STATE_END,         STATE_TYPE_END)
+STATE_CREATE(STATE_ERROR,       STATE_TYPE_END)
+
 PARSE_RESULT PARSE_parse(const char* path) {
     PARSE_RESULT result = { NULL, NULL };
 
@@ -193,6 +200,76 @@ u8 PARSE_get_line_date_info(const char* buffer, MESSAGE_DATE* date) {
         &(date->year), &(date->month), &(date->day),
         &(date->hour), &(date->minute));
     if (r != 5) return 0;
+    return 1;
+}
+
+u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
+    contact->first_name = NULL;
+    contact->last_name = NULL;
+    contact->phone_number = NULL;
+
+    // Look for bracket pair first
+    u8 found_open_bracket = 0;
+    u32 i = 0;
+    while (buffer[i] != '\r' && buffer[i] != '\n' && buffer[i] != '\0') {
+        if (buffer[i] == '(') found_open_bracket = 1;
+        if (buffer[i] == ')') {
+            if (found_open_bracket == 0) return 0;
+            break;
+        }
+        i++;
+    }
+
+    if ((buffer[i] == '\r' || buffer[i] == '\n' || buffer[i] == '\0')
+        && found_open_bracket == 1) return 0;
+
+    // With name
+    if (found_open_bracket == 1) {
+        i = 0;
+
+        while (buffer[i] != '(' && buffer[i] != ' ') i++;
+        const u8 has_last_name = (buffer[i] == ' ');
+
+        // Capture the first name
+        buffer[i] = '\0';
+        contact->first_name = buffer;
+        i++;
+
+        // Capture the optional last name
+        if (has_last_name) {
+            buffer += i;
+            i = 0;
+            while (buffer[i] != '(') i++;
+            buffer[i] = '\0';
+            contact->last_name = buffer;
+            i++;
+        }
+
+        // Capture the phone number
+        buffer += i;
+        i = 0;
+        if (buffer[0] == '+') i++;
+        while (buffer[i] != ')') {
+            if (buffer[i] < '0' || buffer[i] > '9') return 0;
+            i++;
+        }
+
+        buffer[i] = '\0';
+        contact->phone_number = buffer;
+    }
+    // Without name
+    else {
+        i = 0;
+        if (buffer[0] == '+') i++;
+        while (buffer[i] != '\r' && buffer[i] != '\n' && buffer[i] != '\0') {
+            if (buffer[i] < '0' || buffer[i] > '9') return 0;
+            i++;
+        }
+
+        buffer[i] = '\0';
+        contact->phone_number = buffer;
+    }
+
     return 1;
 }
 

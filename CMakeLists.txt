@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.20)
 # Configure! your exe name
 set(EXE_NAME seagull)
 # Configure! this as the absolute path to your vendors folder, DO NOT USE RELATIVE PATHS!
-set(VENDORS "/Users/bweisz/vendors")
+set(VENDORS "/home/bweisz/dev/vendors")
 # Configure! this if you want to build for the old intel based apple systems
 # set(INTEL_APPLE 1)
 
