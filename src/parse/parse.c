@@ -11,7 +11,7 @@
 
 STATE_CREATE(STATE_FIND_BOX,    STATE_TYPE_START)
 STATE_CREATE(STATE_CONTACT,     STATE_TYPE_INTERNAL)
-STATE_CREATE(STATE_TIME,        STATE_TYPE_INTERNAL)
+STATE_CREATE(STATE_DATE,        STATE_TYPE_INTERNAL)
 STATE_CREATE(STATE_BODY,        STATE_TYPE_INTERNAL)
 STATE_CREATE(STATE_END,         STATE_TYPE_END)
 STATE_CREATE(STATE_ERROR,       STATE_TYPE_END)
@@ -41,7 +41,7 @@ PARSE_RESULT PARSE_parse(const char* path) {
     // Add the parsing states
     u8 r = STATE_MACHINE_add_state(state_machine, &STATE_FIND_BOX, STATE_FIND_BOX_action);
     r &= STATE_MACHINE_add_state(state_machine, &STATE_CONTACT, STATE_CONTACT_action);
-    r &= STATE_MACHINE_add_state(state_machine, &STATE_TIME, STATE_TIME_action);
+    r &= STATE_MACHINE_add_state(state_machine, &STATE_DATE, STATE_DATE_action);
     r &= STATE_MACHINE_add_state(state_machine, &STATE_BODY, STATE_BODY_action);
     if (r == 0) {
         free(back_buffer);
@@ -190,11 +190,7 @@ u8 PARSE_goto_next_non_empty_line(const u8* buf, const u32 buf_len,
 }
 
 u8 PARSE_get_line_date_info(const char* buffer, MESSAGE_DATE* date) {
-    date->year = -1;
-    date->month = -1;
-    date->day = -1;
-    date->hour = -1;
-    date->minute = -1;
+    *date = MESSAGE_DATE_make_blank();
 
     const s32 r = sscanf(buffer, "%d/%d/%d %d:%d",
         &(date->year), &(date->month), &(date->day),
@@ -203,10 +199,10 @@ u8 PARSE_get_line_date_info(const char* buffer, MESSAGE_DATE* date) {
     return 1;
 }
 
-u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
-    contact->first_name = NULL;
-    contact->last_name = NULL;
-    contact->phone_number = NULL;
+u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact, const u8 capture) {
+    if (capture) {
+        *contact = MESSAGE_CONTACT_make_blank();
+    }
 
     // Look for bracket pair first
     u8 found_open_bracket = 0;
@@ -221,7 +217,10 @@ u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
     }
 
     if ((buffer[i] == '\r' || buffer[i] == '\n' || buffer[i] == '\0')
-        && found_open_bracket == 1) return 0;
+        && found_open_bracket == 1) {
+        LOG_error("Parsing error: Failed to find closing ')' bracket for contact line.\n");
+        return 0;
+    }
 
     // With name
     if (found_open_bracket == 1) {
@@ -231,7 +230,7 @@ u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
         const u8 has_last_name = (buffer[i] == ' ');
 
         // Capture the first name
-        buffer[i] = '\0';
+        if (capture) buffer[i] = '\0';
         contact->first_name = buffer;
         i++;
 
@@ -240,7 +239,7 @@ u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
             buffer += i;
             i = 0;
             while (buffer[i] != '(') i++;
-            buffer[i] = '\0';
+            if (capture) buffer[i] = '\0';
             contact->last_name = buffer;
             i++;
         }
@@ -250,11 +249,14 @@ u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
         i = 0;
         if (buffer[0] == '+') i++;
         while (buffer[i] != ')') {
-            if (buffer[i] < '0' || buffer[i] > '9') return 0;
+            if (buffer[i] < '0' || buffer[i] > '9') {
+                LOG_error("Parsing error: contact lines contains non numeric character\n");
+                return 0;
+            }
             i++;
         }
 
-        buffer[i] = '\0';
+        if (capture) buffer[i] = '\0';
         contact->phone_number = buffer;
     }
     // Without name
@@ -262,11 +264,14 @@ u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact) {
         i = 0;
         if (buffer[0] == '+') i++;
         while (buffer[i] != '\r' && buffer[i] != '\n' && buffer[i] != '\0') {
-            if (buffer[i] < '0' || buffer[i] > '9') return 0;
+            if (buffer[i] < '0' || buffer[i] > '9') {
+                LOG_error("Parsing error: contact lines contains non numeric character\n");
+                return 0;
+            }
             i++;
         }
 
-        buffer[i] = '\0';
+        if (capture) buffer[i] = '\0';
         contact->phone_number = buffer;
     }
 
@@ -277,25 +282,46 @@ STATE* STATE_FIND_BOX_action(u8* buf, const u32 buf_len, void* context) {
     PARSE_CONTEXT* p_context = (PARSE_CONTEXT*)context;
 
     // Make sure the context exists
-    if (p_context == NULL) return &STATE_ERROR;
+    if (p_context == NULL) {
+        LOG_error("Parsing error: not PARSE_CONTEXT provided\n");
+        return &STATE_ERROR;
+    }
 
     const LIST_u32* line_starts = p_context->line_starts;
-    if (line_starts == NULL) return &STATE_ERROR;
+    if (line_starts == NULL) {
+        LOG_error("Parsing error: line parsing failed\n");
+        return &STATE_ERROR;
+    }
 
     // Find a message box
     p_context->curr_box = MESSAGE_BOX_UNKNOWN;
     while (p_context->line_i < line_starts->size) {
-        if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) return &STATE_ERROR;
+        if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) {
+            LOG_error("Parsing error: failed to parse file header\n");
+            return &STATE_ERROR;
+        }
 
         u32 line_loc;
         LIST_u32_get(line_starts, p_context->line_i++, &line_loc);
 
-        if (line_loc + 3 >= buf_len) return &STATE_ERROR;
-        if (!(buf[line_loc] == 0xEF && buf[line_loc + 1] == 0xBB && buf[line_loc + 2] == 0xBF)) return &STATE_ERROR;
-        if (p_context->line_i >= line_starts->size) return &STATE_ERROR;
+        if (line_loc + 3 >= buf_len) {
+            LOG_error("Parsing error: missing UTF-8 file header\n");
+            return &STATE_ERROR;
+        }
+        if (!(buf[line_loc] == 0xEF && buf[line_loc + 1] == 0xBB && buf[line_loc + 2] == 0xBF)) {
+            LOG_error("Parsing error: invalid UTF-8 file header\n");
+            return &STATE_ERROR;
+        }
+        if (p_context->line_i >= line_starts->size) {
+            LOG_error("Parsing error: incomplete message box header\n");
+            return &STATE_ERROR;
+        }
 
         // Find the next non-empty line
-        if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) return &STATE_ERROR;
+        if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) {
+            LOG_error("Parsing error: incomplete message box header\n");
+            return &STATE_ERROR;
+        }
         LIST_u32_get(line_starts, p_context->line_i++, &line_loc);
 
         u32 box_i = 0;
@@ -318,19 +344,189 @@ STATE* STATE_FIND_BOX_action(u8* buf, const u32 buf_len, void* context) {
     }
 
     // Find the next non-empty line
-    if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) return &STATE_ERROR;
+    if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) {
+        LOG_error("Parsing error: file contains no messages\n");
+        return &STATE_ERROR;
+    }
 
     return &STATE_CONTACT;
 }
 
 STATE* STATE_CONTACT_action(u8* buf, u32 buf_len, void* context) {
-    return NULL;
+    PARSE_CONTEXT* p_context = (PARSE_CONTEXT*)context;
+
+    // Make sure the context exists
+    if (p_context == NULL) {
+        LOG_error("Parsing error: not PARSE_CONTEXT provided\n");
+        return &STATE_ERROR;
+    }
+
+    const LIST_u32* line_starts = p_context->line_starts;
+    if (line_starts == NULL) {
+        LOG_error("Parsing error: line parsing failed\n");
+        return &STATE_ERROR;
+    }
+
+    // Create a new message
+    p_context->curr_message = MESSAGE_make_blank();
+    p_context->curr_box = p_context->curr_box;
+
+    u8 r_has_contact_line = 0;
+    u8 r_has_date_line = 0;
+    while (p_context->line_i < line_starts->size) {
+        if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) {
+            LOG_error("Parsing error: failed to parse file header\n");
+            return &STATE_ERROR;
+        }
+
+        u32 line_loc;
+        LIST_u32_get(line_starts, p_context->line_i, &line_loc);
+
+        r_has_contact_line = PARSE_get_line_contact_info((char*)buf + line_loc,
+            &(p_context->curr_message.contact), 0);
+        if (r_has_contact_line == 0) {
+            LOG_warn("Parsing warning: the current line is not a contact line: %u\n", p_context->line_i + 1);
+            p_context->line_i++;
+            continue;
+        }
+
+        if (p_context->line_i >= line_starts->size) {
+            LOG_error("Parsing error: incomplete message at end of file\n");
+            return &STATE_ERROR;
+        }
+
+        // Get the start of the date line (don't increment the line here because we might try again)
+        LIST_u32_get(line_starts, p_context->line_i + 1, &line_loc);
+
+        // Get the date
+        r_has_date_line = PARSE_get_line_date_info((char*)buf + line_loc, &(p_context->curr_message.date));
+        if (r_has_date_line == 0) {
+            LOG_warn("Parsing warning: the line following the contact line was not a date line: %u\n", p_context->line_i + 2);
+            p_context->line_i++;
+            continue;
+        }
+
+        if (r_has_contact_line && r_has_date_line) break;
+    }
+
+    if (p_context->line_i >= line_starts->size) {
+        LOG_error("Parsing error: failed to find contact line\n");
+        return &STATE_ERROR;
+    }
+
+    u32 line_loc;
+    LIST_u32_get(line_starts, p_context->line_i++, &line_loc);
+    PARSE_get_line_contact_info((char*)buf + line_loc, &p_context->curr_message.contact, 1);
+
+    return &STATE_DATE;
 }
 
-STATE* STATE_TIME_action(u8* buf, u32 buf_len, void* context) {
-    return NULL;
+STATE* STATE_DATE_action(u8* buf, u32 buf_len, void* context) {
+    PARSE_CONTEXT* p_context = (PARSE_CONTEXT*)context;
+
+    // Make sure the context exists
+    if (p_context == NULL) {
+        LOG_error("Parsing error: not PARSE_CONTEXT provided\n");
+        return &STATE_ERROR;
+    }
+
+    const LIST_u32* line_starts = p_context->line_starts;
+    if (line_starts == NULL) {
+        LOG_error("Parsing error: line parsing failed\n");
+        return &STATE_ERROR;
+    }
+
+    // Get the next line start
+    u32 line_loc;
+    LIST_u32_get(line_starts, p_context->line_i++, &line_loc);
+
+    const u8 r_has_date_line = PARSE_get_line_date_info((char*)buf + line_loc, &p_context->curr_message.date);
+    if (r_has_date_line == 0) {
+        LOG_error("Parsing error: expected date line, did not fine one (Line: %u)\n", p_context->line_i);
+        return &STATE_ERROR;
+    }
+
+    if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) {
+        LOG_error("Parsing error: file ended in an empty message\n");
+        return &STATE_ERROR;
+    }
+
+    return &STATE_BODY;
 }
 
 STATE* STATE_BODY_action(u8* buf, u32 buf_len, void* context) {
-    return NULL;
+    PARSE_CONTEXT* p_context = (PARSE_CONTEXT*)context;
+
+    // Make sure the context exists
+    if (p_context == NULL) {
+        LOG_error("Parsing error: not PARSE_CONTEXT provided\n");
+        return &STATE_ERROR;
+    }
+
+    const LIST_u32* line_starts = p_context->line_starts;
+    if (line_starts == NULL) {
+        LOG_error("Parsing error: line parsing failed\n");
+        return &STATE_ERROR;
+    }
+
+    const u32 body_start_line_i = p_context->line_i;
+    u32 body_end_line_i = body_start_line_i;
+    while (p_context->line_i < line_starts->size) {
+        // Get the next line start
+        u32 line_loc;
+        LIST_u32_get(line_starts, p_context->line_i, &line_loc);
+
+        MESSAGE_DATE temp_date;
+        const u8 has_date_line = PARSE_get_line_date_info((char*)buf + line_loc, &temp_date);
+
+        // Use the date line to capture the message body
+        if (has_date_line == 1) {
+            body_end_line_i = p_context->line_i - 2;
+            break;
+        }
+
+        p_context->line_i++;
+    }
+
+    u8 file_has_ended = 0;
+    if (p_context->line_i >= line_starts->size) {
+        body_end_line_i = p_context->line_i - 2;
+        file_has_ended = 1;
+    }
+    else {
+        p_context->line_i -= 2;
+    }
+
+    // Non-empty message
+    if (body_start_line_i != body_end_line_i) {
+        u32 body_start_pos;
+        LIST_u32_get(line_starts, body_start_line_i, &body_start_pos);
+
+        // Set the message body
+        p_context->curr_message.body = (char*)buf + body_start_pos;
+
+        u32 body_end_pos;
+        LIST_u32_get(line_starts, body_end_line_i, &body_end_pos);
+
+        // Cap the message body
+        char* temp_buf = (char*)buf + body_end_pos;
+        while (*temp_buf != '\0' && *temp_buf != '\r' && *temp_buf != '\n') temp_buf++;
+
+        *temp_buf = '\0';
+
+        // Add the message to the message list
+        LIST_MESSAGE_push(p_context->messages, p_context->curr_message);
+    }
+
+    // Go to the next non-empty line
+    if (!PARSE_goto_next_non_empty_line(buf, buf_len, p_context)) {
+        LOG_error("Parsing error: file ended in an empty message\n");
+        return &STATE_ERROR;
+    }
+
+    if (file_has_ended) {
+        return &STATE_END;
+    }
+
+    return &STATE_CONTACT;
 }

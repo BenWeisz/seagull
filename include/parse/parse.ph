@@ -15,7 +15,9 @@ LIST_u32* PARSE_find_line_starts(const u8* buf, const u32 buf_len);
 
 typedef struct {
     LIST_MESSAGE* messages;
+
     MESSAGE_BOX curr_box;
+    MESSAGE curr_message;
 
     LIST_u32* line_starts;
     u32 line_i;
@@ -24,11 +26,11 @@ typedef struct {
 u8 PARSE_goto_next_non_empty_line(const u8* buf, const u32 buf_len,
     PARSE_CONTEXT* context);
 u8 PARSE_get_line_date_info(const char* buffer, MESSAGE_DATE* date);
-u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact);
+u8 PARSE_get_line_contact_info(char* buffer, MESSAGE_CONTACT* contact, const u8 capture);
 
 STATE* STATE_FIND_BOX_action(u8* buf, const u32 buf_len, void* context);
 STATE* STATE_CONTACT_action(u8* buf, u32 buf_len, void* context);
-STATE* STATE_TIME_action(u8* buf, u32 buf_len, void* context);
+STATE* STATE_DATE_action(u8* buf, u32 buf_len, void* context);
 STATE* STATE_BODY_action(u8* buf, u32 buf_len, void* context);
 
 #endif // SEAGULL_PARSE2_PH

@@ -5,8 +5,8 @@ MESSAGE_CONTACT MESSAGE_CONTACT_make_blank() {
     return contact;
 }
 
-MESSAGE_DATE MESSAGE_make_date() {
-    const MESSAGE_DATE date = { 0, 0 ,0 ,0 , 0 };
+MESSAGE_DATE MESSAGE_DATE_make_blank() {
+    const MESSAGE_DATE date = { -1, -1 ,-1 , -1 };
     return date;
 }
 
@@ -14,7 +14,7 @@ LIST_DEFINE(MESSAGE)
 
 MESSAGE MESSAGE_make_blank() {
     const MESSAGE_CONTACT contact = MESSAGE_CONTACT_make_blank();
-    const MESSAGE_DATE date = MESSAGE_make_date();
-    const MESSAGE message = { contact, MESSAGE_BOX_UNKNOWN, date, NULL, 0 };
+    const MESSAGE_DATE date = MESSAGE_DATE_make_blank();
+    const MESSAGE message = { contact, MESSAGE_BOX_UNKNOWN, date, NULL };
     return message;
 }

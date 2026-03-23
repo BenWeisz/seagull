@@ -27,14 +27,13 @@ typedef struct {
     s32 minute;
 } MESSAGE_DATE;
 
-MESSAGE_DATE MESSAGE_make_date();
+MESSAGE_DATE MESSAGE_DATE_make_blank();
 
 typedef struct {
     MESSAGE_CONTACT contact;
     MESSAGE_BOX box;
     MESSAGE_DATE date;
     char* body;
-    u32 hash;
 } MESSAGE;
 
 LIST_DECLARE(MESSAGE)
